@@ -1,0 +1,6 @@
+UID,Email,ProfilePic,Username,Nickname,Roles,Department,CreatedAt
+USR-1001,admin@example.com,https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150,ผู้ดูแลระบบ,แอดมิน,"Admin,Exec1,Exec2,Designer,User",ฝ่ายเทคโนโลยีสารสนเทศ,2026-09-27 08:00:00
+USR-1002,exec1@example.com,https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150,หัวหน้าฝ่าย,หัวหน้า,Exec1,ฝ่ายการตลาด,2026-09-27 08:30:00
+USR-1003,exec2@example.com,https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150,ผู้จัดการคิวงาน,ผู้จ่ายงาน,Exec2,ฝ่ายสื่อสารองค์กร,2026-09-27 09:00:00
+USR-1004,designer@example.com,https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150,นักออกแบบกราฟิก,ดีไซเนอร์,Designer,ฝ่ายออกแบบ,2026-09-27 09:30:00
+USR-1005,user@example.com,https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150,ผู้ขอใช้งานทั่วไป,ผู้ใช้,User,ฝ่ายการตลาด,2026-09-27 10:00:00

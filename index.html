@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Design Queue — Management System</title>
+  <meta name="description" content="Internal design request queue management system with role-based approval workflow." />
+
+  <!-- Tailwind CSS v3 (Play CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+          colors: {
+            brand:   { 50:'#eef2ff',100:'#e0e7ff',200:'#c7d2fe',300:'#a5b4fc',400:'#818cf8',500:'#6366f1',600:'#4f46e5',700:'#4338ca',800:'#3730a3',900:'#312e81' },
+            surface: { 50:'#f8fafc',100:'#f1f5f9',200:'#e2e8f0',300:'#cbd5e1',400:'#94a3b8',500:'#64748b',600:'#475569',700:'#334155',800:'#1e293b',900:'#0f172a',950:'#020617' },
+          },
+          animation: {
+            'fade-in':    'fadeIn .35s ease-out',
+            'slide-up':   'slideUp .4s ease-out',
+            'slide-right':'slideRight .3s ease-out',
+            'pulse-slow': 'pulse 3s ease-in-out infinite',
+          },
+          keyframes: {
+            fadeIn:     { '0%':{ opacity:'0' },                        '100%':{ opacity:'1' } },
+            slideUp:    { '0%':{ opacity:'0', transform:'translateY(16px)' }, '100%':{ opacity:'1', transform:'translateY(0)' } },
+            slideRight: { '0%':{ opacity:'0', transform:'translateX(-12px)' },'100%':{ opacity:'1', transform:'translateX(0)' } },
+          },
+        },
+      },
+    };
+  </script>
+
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- SweetAlert2 -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+  <!-- Google Identity Services -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+  <!-- Minimal custom CSS for things Tailwind can't do inline -->
+  <style>
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+    /* Glassmorphism card */
+    .glass { background: rgba(255,255,255,.72); backdrop-filter: blur(18px) saturate(1.6); -webkit-backdrop-filter: blur(18px) saturate(1.6); }
+
+    /* Dot‑pulse loader */
+    .dot-pulse { display:inline-flex; gap:6px; }
+    .dot-pulse span { width:8px; height:8px; border-radius:50%; background:#6366f1; animation: dotBounce 1.2s ease-in-out infinite; }
+    .dot-pulse span:nth-child(2) { animation-delay:.15s }
+    .dot-pulse span:nth-child(3) { animation-delay:.3s }
+    @keyframes dotBounce { 0%,80%,100%{transform:scale(0);opacity:.4} 40%{transform:scale(1);opacity:1} }
+
+    /* Status badge base */
+    .status-badge { @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold tracking-wide; }
+  </style>
+</head>
+
+<body class="font-sans bg-surface-50 text-surface-800 antialiased">
+
+<!-- ╔══════════════════════════════════════════════════════════╗
+     ║  LOADING OVERLAY                                        ║
+     ╚══════════════════════════════════════════════════════════╝ -->
+<div id="loadingOverlay" class="fixed inset-0 z-[999] flex items-center justify-center bg-surface-900/40 backdrop-blur-sm hidden">
+  <div class="flex flex-col items-center gap-4">
+    <div class="dot-pulse"><span></span><span></span><span></span></div>
+    <p class="text-sm font-medium text-white/80 tracking-wide">Loading…</p>
+  </div>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════════════╗
+     ║  LOGIN SCREEN                                           ║
+     ╚══════════════════════════════════════════════════════════╝ -->
+<section id="loginScreen" class="min-h-screen flex items-center justify-center relative overflow-hidden">
+  <!-- Animated gradient background -->
+  <div class="absolute inset-0 bg-gradient-to-br from-brand-600 via-brand-500 to-purple-600"></div>
+  <div class="absolute inset-0 opacity-30"
+       style="background-image:radial-gradient(circle at 20% 50%, rgba(255,255,255,.18) 0%, transparent 50%),
+              radial-gradient(circle at 80% 20%, rgba(255,255,255,.12) 0%, transparent 40%);">
+  </div>
+
+  <!-- Login card -->
+  <div class="relative z-10 glass rounded-2xl shadow-2xl shadow-brand-900/20 p-10 w-full max-w-md animate-slide-up">
+    <!-- Logo area -->
+    <div class="flex flex-col items-center mb-8">
+      <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-500 to-purple-600 flex items-center justify-center shadow-lg shadow-brand-500/30 mb-4">
+        <svg class="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.764m3.42 3.42a6.776 6.776 0 00-3.42-3.42" />
+        </svg>
+      </div>
+      <h1 class="text-2xl font-bold text-surface-900 tracking-tight">Design Queue</h1>
+      <p class="text-surface-500 text-sm mt-1">Sign in to manage design requests</p>
+    </div>
+
+    <!-- Google Sign In Button rendered here -->
+    <div id="googleSignInBtn" class="flex justify-center"></div>
+
+    <div class="mt-6 text-center">
+      <p class="text-xs text-surface-400">Enterprise Design Request Management</p>
+    </div>
+  </div>
+</section>
+
+<!-- ╔══════════════════════════════════════════════════════════╗
+     ║  MAIN APPLICATION SHELL                                 ║
+     ╚══════════════════════════════════════════════════════════╝ -->
+<div id="mainApp" class="hidden min-h-screen flex">
+
+  <!-- ── SIDEBAR ─────────────────────────────────────────── -->
+  <aside id="sidebar" class="w-64 bg-surface-900 text-white flex-shrink-0 flex flex-col fixed inset-y-0 left-0 z-50 transition-transform duration-300 lg:translate-x-0 -translate-x-full">
+    <!-- Brand -->
+    <div class="flex items-center gap-3 px-5 py-5 border-b border-white/10">
+      <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-brand-400 to-purple-500 flex items-center justify-center">
+        <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.764m3.42 3.42a6.776 6.776 0 00-3.42-3.42" />
+        </svg>
+      </div>
+      <span class="font-bold text-lg tracking-tight">DesignQ</span>
+    </div>
+
+    <!-- Navigation -->
+    <nav id="sidebarNav" class="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+      <!-- Items injected by JS based on role -->
+    </nav>
+
+    <!-- User card -->
+    <div class="border-t border-white/10 p-4">
+      <div class="flex items-center gap-3">
+        <img id="sidebarAvatar" src="" alt="avatar" class="w-9 h-9 rounded-full object-cover ring-2 ring-white/20" />
+        <div class="min-w-0 flex-1">
+          <p id="sidebarName" class="text-sm font-semibold truncate"></p>
+          <p id="sidebarRole" class="text-xs text-surface-400 truncate"></p>
+        </div>
+        <button id="logoutBtn" title="Sign out" class="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
+          <svg class="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Mobile sidebar toggle -->
+  <button id="sidebarToggle" class="lg:hidden fixed top-4 left-4 z-[60] p-2 rounded-lg bg-surface-900 text-white shadow-lg">
+    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+    </svg>
+  </button>
+
+  <!-- ── MAIN CONTENT ────────────────────────────────────── -->
+  <main id="contentArea" class="flex-1 lg:ml-64 min-h-screen">
+
+    <!-- Top bar -->
+    <header class="sticky top-0 z-30 bg-white/80 backdrop-blur-lg border-b border-surface-200">
+      <div class="flex items-center justify-between px-6 py-4">
+        <div>
+          <h2 id="viewTitle" class="text-xl font-bold text-surface-900"></h2>
+          <p id="viewSubtitle" class="text-sm text-surface-400 mt-0.5"></p>
+        </div>
+        <div id="topBarActions" class="flex items-center gap-3">
+          <!-- Dynamic action buttons injected by JS -->
+        </div>
+      </div>
+    </header>
+
+    <!-- View container — only one child visible at a time -->
+    <div id="viewContainer" class="p-6">
+
+      <!-- ──── USER: My Requests ──────────────────────── -->
+      <div id="userView" class="view-panel hidden animate-fade-in">
+        <!-- Stats cards -->
+        <div id="userStats" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
+        <!-- Jobs list -->
+        <div id="userJobsList" class="space-y-3"></div>
+        <div id="userEmpty" class="hidden flex flex-col items-center justify-center py-16 text-center">
+          <svg class="w-16 h-16 text-surface-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m6.75 12H9.75m0 0l2.25-2.25M9.75 15l2.25 2.25M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+          </svg>
+          <p class="text-surface-500 font-medium">No requests yet</p>
+          <p class="text-surface-400 text-sm mt-1">Click "New Request" to submit your first design job.</p>
+        </div>
+      </div>
+
+      <!-- ──── REQUEST FORM ───────────────────────────── -->
+      <div id="requestFormView" class="view-panel hidden animate-slide-up">
+        <form id="requestForm" class="max-w-2xl mx-auto bg-white rounded-2xl shadow-sm border border-surface-200 p-8 space-y-6">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Auto-filled -->
+            <div>
+              <label class="block text-sm font-medium text-surface-600 mb-1.5">Date</label>
+              <input id="rfDate" type="text" readonly class="w-full px-4 py-2.5 rounded-xl bg-surface-100 border border-surface-200 text-surface-500 text-sm cursor-not-allowed" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-surface-600 mb-1.5">Email</label>
+              <input id="rfEmail" type="email" readonly class="w-full px-4 py-2.5 rounded-xl bg-surface-100 border border-surface-200 text-surface-500 text-sm cursor-not-allowed" />
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-sm font-medium text-surface-600 mb-1.5">Requester Name</label>
+              <input id="rfName" type="text" readonly class="w-full px-4 py-2.5 rounded-xl bg-surface-100 border border-surface-200 text-surface-500 text-sm cursor-not-allowed" />
+            </div>
+
+            <!-- User input fields -->
+            <div>
+              <label class="block text-sm font-medium text-surface-600 mb-1.5">Department <span class="text-red-400">*</span></label>
+              <input id="rfDepartment" type="text" required placeholder="e.g. Marketing" class="w-full px-4 py-2.5 rounded-xl border border-surface-200 focus:ring-2 focus:ring-brand-400 focus:border-brand-400 text-sm transition" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-surface-600 mb-1.5">Service Type <span class="text-red-400">*</span></label>
+              <select id="rfCategory" required class="w-full px-4 py-2.5 rounded-xl border border-surface-200 focus:ring-2 focus:ring-brand-400 focus:border-brand-400 text-sm transition">
+                <option value="">Select…</option>
+                <option value="Media">Media</option>
+                <option value="Photo">Photo</option>
+                <option value="Sticker">Sticker</option>
+                <option value="Print">Print</option>
+                <option value="Graphic">Graphic</option>
+                <option value="Video">Video</option>
+                <option value="Document">Document</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+
+            <!-- Conditional: Print quantity -->
+            <div id="rfQtyWrap" class="hidden">
+              <label class="block text-sm font-medium text-surface-600 mb-1.5">Quantity</label>
+              <input id="rfQty" type="number" min="1" placeholder="How many copies?" class="w-full px-4 py-2.5 rounded-xl border border-surface-200 focus:ring-2 focus:ring-brand-400 focus:border-brand-400 text-sm transition" />
+            </div>
+
+            <div class="md:col-span-2">
+              <label class="block text-sm font-medium text-surface-600 mb-1.5">Project Name <span class="text-red-400">*</span></label>
+              <input id="rfProject" type="text" required placeholder="e.g. Q3 Campaign Banner" class="w-full px-4 py-2.5 rounded-xl border border-surface-200 focus:ring-2 focus:ring-brand-400 focus:border-brand-400 text-sm transition" />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-surface-600 mb-1.5">Use Date</label>
+              <input id="rfUseDate" type="date" class="w-full px-4 py-2.5 rounded-xl border border-surface-200 focus:ring-2 focus:ring-brand-400 focus:border-brand-400 text-sm transition" />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-surface-600 mb-1.5">Due Date <span class="text-red-400">*</span></label>
+              <input id="rfDueDate" type="date" required class="w-full px-4 py-2.5 rounded-xl border border-surface-200 focus:ring-2 focus:ring-brand-400 focus:border-brand-400 text-sm transition" />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-surface-600 mb-1.5">Delivery Method <span class="text-red-400">*</span></label>
+              <select id="rfDelivery" required class="w-full px-4 py-2.5 rounded-xl border border-surface-200 focus:ring-2 focus:ring-brand-400 focus:border-brand-400 text-sm transition">
+                <option value="">Select…</option>
+                <option value="Google Drive">Google Drive</option>
+                <option value="Contact">Contact / Pick-up</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+
+            <div id="rfDeliveryDetailWrap" class="hidden">
+              <label class="block text-sm font-medium text-surface-600 mb-1.5">Delivery Detail</label>
+              <input id="rfDeliveryDetail" type="text" placeholder="Specify…" class="w-full px-4 py-2.5 rounded-xl border border-surface-200 focus:ring-2 focus:ring-brand-400 focus:border-brand-400 text-sm transition" />
+            </div>
+
+            <div class="md:col-span-2">
+              <label class="block text-sm font-medium text-surface-600 mb-1.5">Additional Details</label>
+              <textarea id="rfDetails" rows="3" placeholder="Any extra instructions, references, or links…" class="w-full px-4 py-2.5 rounded-xl border border-surface-200 focus:ring-2 focus:ring-brand-400 focus:border-brand-400 text-sm transition resize-none"></textarea>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-end gap-3 pt-4 border-t border-surface-100">
+            <button type="button" id="rfCancelBtn" class="px-5 py-2.5 rounded-xl text-sm font-medium text-surface-600 hover:bg-surface-100 transition">Cancel</button>
+            <button type="submit" class="px-6 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-brand-500 to-purple-600 hover:from-brand-600 hover:to-purple-700 shadow-md shadow-brand-500/20 transition-all hover:shadow-lg">
+              Submit Request
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- ──── EXEC1: Acknowledge Queue ───────────────── -->
+      <div id="exec1View" class="view-panel hidden animate-fade-in">
+        <div id="exec1List" class="space-y-3"></div>
+        <div id="exec1Empty" class="hidden flex flex-col items-center justify-center py-16 text-center">
+          <svg class="w-16 h-16 text-surface-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          <p class="text-surface-500 font-medium">All caught up!</p>
+          <p class="text-surface-400 text-sm mt-1">No pending requests in your department.</p>
+        </div>
+      </div>
+
+      <!-- ──── EXEC2: Assign & Approve Queue ──────────── -->
+      <div id="exec2View" class="view-panel hidden animate-fade-in">
+        <div id="exec2List" class="space-y-3"></div>
+        <div id="exec2Empty" class="hidden flex flex-col items-center justify-center py-16 text-center">
+          <svg class="w-16 h-16 text-surface-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          <p class="text-surface-500 font-medium">No jobs awaiting assignment</p>
+          <p class="text-surface-400 text-sm mt-1">Acknowledged jobs will appear here for designer assignment.</p>
+        </div>
+      </div>
+
+      <!-- ──── DESIGNER: Work Queue + History ─────────── -->
+      <div id="designerView" class="view-panel hidden animate-fade-in">
+        <!-- Tabs -->
+        <div class="flex border-b border-surface-200 mb-6">
+          <button data-tab="active" class="designer-tab px-5 py-2.5 text-sm font-semibold border-b-2 border-brand-500 text-brand-600 transition">Active Queue</button>
+          <button data-tab="placeholder" class="designer-tab px-5 py-2.5 text-sm font-medium text-surface-400 border-b-2 border-transparent hover:text-surface-600 transition">Upcoming</button>
+          <button data-tab="history" class="designer-tab px-5 py-2.5 text-sm font-medium text-surface-400 border-b-2 border-transparent hover:text-surface-600 transition">History</button>
+        </div>
+        <!-- Sort (only for active) -->
+        <div id="designerSortBar" class="flex items-center gap-3 mb-4">
+          <span class="text-xs text-surface-400 font-medium uppercase tracking-wider">Sort by</span>
+          <select id="designerSort" class="text-sm border border-surface-200 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-brand-400">
+            <option value="dueDate">Due Date</option>
+            <option value="requestDate">Request Date</option>
+          </select>
+        </div>
+        <div id="designerActiveList" class="space-y-3"></div>
+        <div id="designerPlaceholderList" class="space-y-3 hidden"></div>
+        <div id="designerHistoryList" class="space-y-3 hidden"></div>
+        <div id="designerEmpty" class="hidden flex flex-col items-center justify-center py-16 text-center">
+          <svg class="w-16 h-16 text-surface-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.41a2.25 2.25 0 013.182 0l2.909 2.91M18 21H6a3 3 0 01-3-3V6a3 3 0 013-3h12a3 3 0 013 3v12a3 3 0 01-3 3z" /></svg>
+          <p class="text-surface-500 font-medium">No active jobs</p>
+          <p class="text-surface-400 text-sm mt-1">Jobs assigned to you will appear here.</p>
+        </div>
+      </div>
+
+      <!-- ──── ADMIN: All Jobs + User Management ──────── -->
+      <div id="adminView" class="view-panel hidden animate-fade-in">
+        <!-- Admin tabs -->
+        <div class="flex border-b border-surface-200 mb-6">
+          <button data-admintab="jobs" class="admin-tab px-5 py-2.5 text-sm font-semibold border-b-2 border-brand-500 text-brand-600 transition">All Jobs</button>
+          <button data-admintab="users" class="admin-tab px-5 py-2.5 text-sm font-medium text-surface-400 border-b-2 border-transparent hover:text-surface-600 transition">Manage Users</button>
+        </div>
+
+        <!-- Jobs panel -->
+        <div id="adminJobsPanel">
+          <!-- Filters -->
+          <div class="flex flex-wrap gap-3 mb-5">
+            <input id="adminSearch" type="text" placeholder="Search project, requester…" class="px-4 py-2 rounded-xl border border-surface-200 text-sm focus:ring-2 focus:ring-brand-400 w-64 transition" />
+            <select id="adminFilterStatus" class="px-3 py-2 rounded-xl border border-surface-200 text-sm focus:ring-2 focus:ring-brand-400 transition">
+              <option value="">All Status</option>
+              <option value="Pending">Pending</option>
+              <option value="Acknowledged">Acknowledged</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Completed">Completed</option>
+              <option value="Cancelled">Cancelled</option>
+            </select>
+            <select id="adminSort" class="px-3 py-2 rounded-xl border border-surface-200 text-sm focus:ring-2 focus:ring-brand-400 transition">
+              <option value="newest">Newest First</option>
+              <option value="oldest">Oldest First</option>
+              <option value="dueDate">Due Date</option>
+            </select>
+          </div>
+          <!-- Table -->
+          <div class="bg-white rounded-2xl shadow-sm border border-surface-200 overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="bg-surface-50 text-surface-500 text-xs uppercase tracking-wider">
+                    <th class="px-4 py-3 text-left font-semibold">Project</th>
+                    <th class="px-4 py-3 text-left font-semibold">Requester</th>
+                    <th class="px-4 py-3 text-left font-semibold">Dept</th>
+                    <th class="px-4 py-3 text-left font-semibold">Service</th>
+                    <th class="px-4 py-3 text-left font-semibold">Due</th>
+                    <th class="px-4 py-3 text-left font-semibold">Status</th>
+                    <th class="px-4 py-3 text-left font-semibold">Designer</th>
+                    <th class="px-4 py-3 text-center font-semibold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="adminJobsBody" class="divide-y divide-surface-100">
+                  <!-- Rows injected by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Users panel -->
+        <div id="adminUsersPanel" class="hidden">
+          <div class="bg-white rounded-2xl shadow-sm border border-surface-200 overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="bg-surface-50 text-surface-500 text-xs uppercase tracking-wider">
+                    <th class="px-4 py-3 text-left font-semibold">User</th>
+                    <th class="px-4 py-3 text-left font-semibold">Email</th>
+                    <th class="px-4 py-3 text-left font-semibold">Department</th>
+                    <th class="px-4 py-3 text-left font-semibold">Roles</th>
+                    <th class="px-4 py-3 text-center font-semibold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="adminUsersBody" class="divide-y divide-surface-100">
+                  <!-- Rows injected by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /viewContainer -->
+  </main>
+</div><!-- /mainApp -->
+
+<!-- Sidebar overlay for mobile -->
+<div id="sidebarOverlay" class="fixed inset-0 bg-black/40 z-40 hidden lg:hidden"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
