@@ -33,16 +33,22 @@
     };
   </script>
 
-  <!-- Google Fonts: Prompt & Inter -->
+  <!-- Preconnect to external resources for high speed -->
+  <link rel="preconnect" href="https://accounts.google.com" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preconnect" href="https://cdn.tailwindcss.com" crossorigin />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <link rel="dns-prefetch" href="https://script.google.com" />
+
+  <!-- Google Fonts: Prompt & Inter -->
   <link href="https://fonts.googleapis.com/css2?family=Prompt:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 
-  <!-- SweetAlert2 -->
-  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <!-- SweetAlert2 (defer so it does not block initial rendering) -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11" defer></script>
 
-  <!-- Google Identity Services -->
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <!-- Google Identity Services (async defer with immediate callback) -->
+  <script src="https://accounts.google.com/gsi/client" async defer onload="window.onGsiLoaded && window.onGsiLoaded()"></script>
 
   <!-- Minimal custom CSS for things Tailwind can't do inline -->
   <style>
@@ -104,7 +110,12 @@
     </div>
 
     <!-- Google Sign In Button rendered here -->
-    <div id="googleSignInBtn" class="flex justify-center"></div>
+    <div id="googleSignInBtn" class="flex justify-center min-h-[44px]">
+      <div id="gsiSkeleton" class="flex items-center justify-center gap-2.5 w-[280px] h-[44px] rounded-full border border-surface-200 bg-white/90 shadow-sm animate-pulse text-surface-500 text-xs font-medium">
+        <svg class="w-4 h-4 animate-spin text-brand-500" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+        กำลังโหลดปุ่มเข้าสู่ระบบ…
+      </div>
+    </div>
 
     <div class="mt-6 text-center">
       <p class="text-xs text-surface-400">Design Queue Management System</p>
@@ -408,6 +419,6 @@
 <!-- Sidebar overlay for mobile -->
 <div id="sidebarOverlay" class="fixed inset-0 bg-black/40 z-40 hidden lg:hidden"></div>
 
-<script src="app.js"></script>
+<script src="app.js" defer></script>
 </body>
 </html>

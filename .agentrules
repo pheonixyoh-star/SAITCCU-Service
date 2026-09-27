@@ -1,0 +1,37 @@
+{
+    "project": "Design Queue Management System",
+    "tech_stack": [
+        "HTML5",
+        "Tailwind CSS (via CDN)",
+        "Vanilla JavaScript (ES6+)",
+        "SweetAlert2",
+        "Google Apps Script (GAS)",
+        "Google Sheets (Database)",
+        "Google Identity Services (GIS)"
+    ],
+    "coding_standards": {
+        "frontend": [
+            "Use single-page architecture (SPA) pattern with div toggling for views.",
+            "Never store sensitive API keys in frontend; use GAS as a secure proxy.",
+            "All asynchronous operations (fetch to GAS) must include loading states (spinners) and error handling.",
+            "Use SweetAlert2 for all alerts, prompts, and confirmations. No native alert() or confirm().",
+            "CSS must exclusively use Tailwind utility classes. Avoid custom CSS unless absolutely necessary."
+        ],
+        "backend_gas": [
+            "Implement robust CORS handling in doPost() and doGet().",
+            "Always return properly stringified JSON responses using ContentService.MimeType.JSON.",
+            "Use descriptive variable names and modular functions (e.g., function getJobs(), function updateJobStatus()).",
+            "Implement a unified lock mechanism (LockService) for database write operations to prevent race conditions."
+        ],
+        "database": [
+            "Sheet1 is 'Users' (UID, Email, ProfilePic, Username, Nickname, Roles, CreatedAt).",
+            "Sheet2 is 'Jobs' (JobID, RequestDate, RequesterEmail, RequesterName, Department, JobCategory, JobDetails, ProjectName, UseDate, DeliveryMethod, DeliveryDetail, DueDate, Exec1_Status, Exec1_Name, Exec2_Status, Exec2_Name, AssignedDesigner, JobStatus, CancelReason, CompletedDate).",
+            "Use array indexing carefully; map header names to indices dynamically if possible to avoid breakage if columns shift."
+        ],
+        "business_logic": {
+            "roles": "Array or comma-separated string. A user can be both Exec2 and Admin.",
+            "placeholders": "Jobs not yet approved by Exec2 must render as non-interactive placeholders for the Designer.",
+            "notifications": "Use MailApp.sendEmail() in GAS. Trigger only on specific state changes (Exec2 Approval, Job Cancellation)."
+        }
+    }
+}

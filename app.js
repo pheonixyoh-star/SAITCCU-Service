@@ -41,41 +41,108 @@ const DOM = {
 };
 
 // ═══════════════════════════════════════════════════════════
-//  1. GOOGLE SIGN‑IN
+//  1. GOOGLE SIGN‑IN & PERMANENT LOGIN SESSION
 // ═══════════════════════════════════════════════════════════
 
-window.addEventListener('load', () => {
-  if (typeof google !== 'undefined' && google.accounts) {
+const SESSION_KEY = 'designq_user_session';
+let _gsiInitialized = false;
+
+function tryInitGSI() {
+  if (_gsiInitialized) return;
+  if (typeof google !== 'undefined' && google.accounts && google.accounts.id) {
+    _gsiInitialized = true;
     initGoogleSignIn();
-  } else {
-    const checkGsi = setInterval(() => {
-      if (typeof google !== 'undefined' && google.accounts) {
-        clearInterval(checkGsi);
-        initGoogleSignIn();
-      }
-    }, 200);
   }
-});
+}
+
+// Immediate hook when GSI script loads
+window.onGsiLoaded = function () {
+  tryInitGSI();
+};
+
+function checkSavedSession() {
+  try {
+    const saved = localStorage.getItem(SESSION_KEY) || sessionStorage.getItem(SESSION_KEY);
+    if (saved) {
+      App.user = JSON.parse(saved);
+      if (App.user && App.user.email) {
+        enterApp();
+        // Silently refresh permissions from Google Apps Script in background
+        apiCall('getUser', { email: App.user.email })
+          .then((res) => {
+            if (res.success && res.user) {
+              App.user = res.user;
+              localStorage.setItem(SESSION_KEY, JSON.stringify(res.user));
+              if (DOM.sidebarName) DOM.sidebarName.textContent = App.user.nickname || App.user.username;
+              if (DOM.sidebarRole) DOM.sidebarRole.textContent = App.user.roles.map((r) => ROLE_LABELS[r] || r).join(', ');
+            }
+          })
+          .catch(() => { /* continue using cached session on network error */ });
+        return true;
+      }
+    }
+  } catch (e) {
+    localStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem(SESSION_KEY);
+  }
+  return false;
+}
+
+// Run immediately on page load: if session exists, enter app instantly (0.01s)
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    if (!checkSavedSession()) {
+      tryInitGSI();
+    }
+  });
+} else {
+  if (!checkSavedSession()) {
+    tryInitGSI();
+  }
+}
+
+// Fast retry poll in case script is still downloading (stops after 2.5s)
+let _gsiAttempts = 0;
+const _gsiPoll = setInterval(() => {
+  if (_gsiInitialized || _gsiAttempts++ > 25) {
+    clearInterval(_gsiPoll);
+    return;
+  }
+  tryInitGSI();
+}, 100);
 
 function initGoogleSignIn() {
-  google.accounts.id.initialize({
-    client_id: GOOGLE_CLIENT_ID,
-    callback: handleGoogleCredential,
-    auto_select: false,
-  });
+  try {
+    google.accounts.id.initialize({
+      client_id: GOOGLE_CLIENT_ID,
+      callback: handleGoogleCredential,
+      auto_select: true, // Automatically log in if user already authorized Google account
+      use_fedcm_for_prompt: true,
+      itp_support: true,
+      cancel_on_tap_outside: true,
+    });
 
-  google.accounts.id.renderButton(
-    document.getElementById('googleSignInBtn'),
-    {
-      theme: 'outline',
-      size: 'large',
-      type: 'standard',
-      shape: 'pill',
-      text: 'signin_with',
-      logo_alignment: 'left',
-      width: 280,
-    }
-  );
+    const btnContainer = document.getElementById('googleSignInBtn');
+    if (!btnContainer) return;
+
+    btnContainer.innerHTML = ''; // Remove skeleton
+
+    google.accounts.id.renderButton(
+      btnContainer,
+      {
+        theme: 'outline',
+        size: 'large',
+        type: 'standard',
+        shape: 'pill',
+        text: 'signin_with',
+        logo_alignment: 'left',
+        width: 280,
+        locale: 'th',
+      }
+    );
+  } catch (err) {
+    console.warn('GSI render error:', err);
+  }
 }
 
 function _decodeJWT(token) {
@@ -103,13 +170,14 @@ function handleGoogleCredential(response) {
     picture: payload.picture,
   };
 
-  showLoading();
+  showLoading('กำลังเข้าสู่ระบบและตรวจสอบสิทธิ์ผู้ใช้…');
 
   apiCall('getUser', { email: payload.email })
     .then((res) => {
       hideLoading();
       if (res.success && res.user) {
         App.user = res.user;
+        localStorage.setItem(SESSION_KEY, JSON.stringify(res.user));
         toast('success', 'เข้าสู่ระบบสำเร็จ', 'ยินดีต้อนรับคุณ ' + (res.user.nickname || res.user.username));
         enterApp();
       } else {
@@ -168,6 +236,7 @@ function promptFirstTimeRegistration(gp) {
           hideLoading();
           if (res.success && res.user) {
             App.user = res.user;
+            localStorage.setItem(SESSION_KEY, JSON.stringify(res.user));
             toast('success', 'ลงทะเบียนสำเร็จ', 'ยินดีต้อนรับคุณ ' + res.user.nickname + ' เข้าสู่ระบบ');
             enterApp();
           } else {
@@ -349,7 +418,11 @@ function bindGlobalEvents() {
       cancelButtonText: 'ยกเลิก',
     }).then((result) => {
       if (result.isConfirmed) {
-        google.accounts.id.disableAutoSelect();
+        localStorage.removeItem(SESSION_KEY);
+        sessionStorage.removeItem(SESSION_KEY);
+        if (typeof google !== 'undefined' && google.accounts && google.accounts.id) {
+          google.accounts.id.disableAutoSelect();
+        }
         App.user = null;
         App.googleProfile = null;
         DOM.mainApp.classList.add('hidden');
@@ -1234,20 +1307,31 @@ function adminSaveUser(email) {
  */
 function apiCall(action, data) {
   const payload = Object.assign({}, data, { action: action });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 20000);
 
   return fetch(GAS_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify(payload),
     redirect: 'follow',
+    signal: controller.signal,
   })
     .then((response) => {
-      if (!response.ok) throw new Error('Network response was not ok (' + response.status + ')');
+      clearTimeout(timeoutId);
+      if (!response.ok) throw new Error('การตอบกลับเครือข่ายขัดข้อง (' + response.status + ')');
       return response.json();
     })
     .then((result) => {
-      if (result.success === false) throw new Error(result.error || 'Unknown error');
+      if (result.success === false) throw new Error(result.error || 'เกิดข้อผิดพลาดไม่ทราบสาเหตุ');
       return result;
+    })
+    .catch((err) => {
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') {
+        throw new Error('การเชื่อมต่อไปยัง Google Apps Script หมดเวลา (Timeout) กรุณาลองใหม่อีกครั้ง');
+      }
+      throw err;
     });
 }
 
@@ -1255,7 +1339,9 @@ function apiCall(action, data) {
 //  8. UI UTILITIES
 // ═══════════════════════════════════════════════════════════
 
-function showLoading() {
+function showLoading(msg) {
+  const p = $('#loadingOverlay p');
+  if (p) p.textContent = msg || 'กำลังประมวลผล…';
   DOM.loadingOverlay.classList.remove('hidden');
 }
 
