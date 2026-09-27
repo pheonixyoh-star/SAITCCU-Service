@@ -5,8 +5,8 @@
  */
 
 // ─── CONFIGURATION ──────────────────────────────────────────
-const GAS_URL          = 'YOUR_GAS_WEB_APP_URL_HERE'; // ← Replace after deploying GAS
-const GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID_HERE'; // ← Replace with OAuth 2.0 Client ID
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbz9MsTZjgfiXj2wlqBx7mkLi25jAYRNTuGVMZett9lHodHSuztvCJ7AXsoZuV0GWBEB/exec';
+const GOOGLE_CLIENT_ID = '60009065644-095bqh323s4b15bidi6sf7glat4ehmvs.apps.googleusercontent.com';
 
 // ─── APPLICATION STATE ──────────────────────────────────────
 const App = {
@@ -23,21 +23,21 @@ const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
 const DOM = {
-  loadingOverlay:  $('#loadingOverlay'),
-  loginScreen:     $('#loginScreen'),
-  mainApp:         $('#mainApp'),
-  sidebar:         $('#sidebar'),
-  sidebarNav:      $('#sidebarNav'),
-  sidebarAvatar:   $('#sidebarAvatar'),
-  sidebarName:     $('#sidebarName'),
-  sidebarRole:     $('#sidebarRole'),
-  sidebarToggle:   $('#sidebarToggle'),
-  sidebarOverlay:  $('#sidebarOverlay'),
-  logoutBtn:       $('#logoutBtn'),
-  viewTitle:       $('#viewTitle'),
-  viewSubtitle:    $('#viewSubtitle'),
-  topBarActions:   $('#topBarActions'),
-  viewContainer:   $('#viewContainer'),
+  loadingOverlay: $('#loadingOverlay'),
+  loginScreen: $('#loginScreen'),
+  mainApp: $('#mainApp'),
+  sidebar: $('#sidebar'),
+  sidebarNav: $('#sidebarNav'),
+  sidebarAvatar: $('#sidebarAvatar'),
+  sidebarName: $('#sidebarName'),
+  sidebarRole: $('#sidebarRole'),
+  sidebarToggle: $('#sidebarToggle'),
+  sidebarOverlay: $('#sidebarOverlay'),
+  logoutBtn: $('#logoutBtn'),
+  viewTitle: $('#viewTitle'),
+  viewSubtitle: $('#viewSubtitle'),
+  topBarActions: $('#topBarActions'),
+  viewContainer: $('#viewContainer'),
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -45,14 +45,12 @@ const DOM = {
 // ═══════════════════════════════════════════════════════════
 
 window.addEventListener('load', () => {
-  // Wait for the GSI library to load
   if (typeof google !== 'undefined' && google.accounts) {
     initGoogleSignIn();
   } else {
-    // Retry until GSI script loads
-    const interval = setInterval(() => {
+    const checkGsi = setInterval(() => {
       if (typeof google !== 'undefined' && google.accounts) {
-        clearInterval(interval);
+        clearInterval(checkGsi);
         initGoogleSignIn();
       }
     }, 200);
@@ -71,103 +69,114 @@ function initGoogleSignIn() {
     {
       theme: 'outline',
       size: 'large',
-      width: 320,
+      type: 'standard',
       shape: 'pill',
       text: 'signin_with',
-      logo_alignment: 'center',
+      logo_alignment: 'left',
+      width: 280,
     }
   );
+}
+
+function _decodeJWT(token) {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    console.error('JWT decode error', e);
+    return {};
+  }
 }
 
 function handleGoogleCredential(response) {
   const payload = _decodeJWT(response.credential);
   App.googleProfile = {
-    email:   payload.email,
-    name:    payload.name,
+    email: payload.email,
+    name: payload.name,
     picture: payload.picture,
   };
 
-  // Check if user exists in our database
   showLoading();
+
   apiCall('getUser', { email: payload.email })
     .then((res) => {
       hideLoading();
-      if (res.user) {
+      if (res.success && res.user) {
         App.user = res.user;
+        toast('success', 'เข้าสู่ระบบสำเร็จ', 'ยินดีต้อนรับคุณ ' + (res.user.nickname || res.user.username));
         enterApp();
       } else {
-        promptRegistration();
+        promptFirstTimeRegistration(App.googleProfile);
       }
     })
     .catch((err) => {
       hideLoading();
-      toast('error', 'Login Error', err.message || 'Could not verify user.');
+      toast('error', 'เกิดข้อผิดพลาด', err.message);
     });
 }
 
-function _decodeJWT(token) {
-  const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-  return JSON.parse(atob(base64));
-}
-
-// ─── Registration prompt (SweetAlert2) ──────────────────────
-
-function promptRegistration() {
-  const gp = App.googleProfile;
+function promptFirstTimeRegistration(gp) {
   Swal.fire({
-    title: 'Welcome! 🎉',
+    title: 'ยินดีต้อนรับสู่ระบบ!',
     html: `
-      <p class="text-sm text-gray-500 mb-4">First time here — let's set up your profile.</p>
+      <p class="text-sm text-gray-500 mb-4">เข้าสู่ระบบครั้งแรก — กรุณาระบุข้อมูลส่วนตัวของคุณเพื่อเริ่มใช้งาน</p>
       <div class="text-left space-y-3">
         <div>
-          <label class="block text-xs font-semibold text-gray-500 mb-1">Username</label>
-          <input id="swalUsername" class="swal2-input !mt-0 !text-sm" placeholder="Display name" value="${gp.name}" />
+          <label class="block text-xs font-semibold text-gray-500 mb-1">ชื่อ-นามสกุล <span class="text-red-500">*</span></label>
+          <input id="swalUsername" class="swal2-input !mt-0 !text-sm" placeholder="เช่น นายสมชาย ใจดี" value="${gp.name || ''}" />
         </div>
         <div>
-          <label class="block text-xs font-semibold text-gray-500 mb-1">Nickname</label>
-          <input id="swalNickname" class="swal2-input !mt-0 !text-sm" placeholder="Short name / alias" />
+          <label class="block text-xs font-semibold text-gray-500 mb-1">ชื่อเล่น / ชื่อเรียกสั้นๆ</label>
+          <input id="swalNickname" class="swal2-input !mt-0 !text-sm" placeholder="เช่น บอย, ตาล" />
         </div>
         <div>
-          <label class="block text-xs font-semibold text-gray-500 mb-1">Department</label>
-          <input id="swalDept" class="swal2-input !mt-0 !text-sm" placeholder="e.g. Marketing" />
+          <label class="block text-xs font-semibold text-gray-500 mb-1">ฝ่าย / แผนก</label>
+          <input id="swalDept" class="swal2-input !mt-0 !text-sm" placeholder="เช่น ฝ่ายการตลาด, ฝ่ายสารสนเทศ" />
         </div>
       </div>
     `,
-    confirmButtonText: 'Create Account',
+    confirmButtonText: 'บันทึกข้อมูลและเข้าสู่ระบบ',
     confirmButtonColor: '#6366f1',
     showCancelButton: false,
     allowOutsideClick: false,
     preConfirm: () => {
       const username = document.getElementById('swalUsername').value.trim();
       const nickname = document.getElementById('swalNickname').value.trim();
-      const dept     = document.getElementById('swalDept').value.trim();
-      if (!username) { Swal.showValidationMessage('Username is required.'); return false; }
+      const dept = document.getElementById('swalDept').value.trim();
+      if (!username) { Swal.showValidationMessage('กรุณาระบุชื่อ-นามสกุล'); return false; }
       return { username, nickname: nickname || username, department: dept };
     },
   }).then((result) => {
     if (result.isConfirmed) {
       showLoading();
       apiCall('registerUser', {
-        email:      gp.email,
+        email: gp.email,
         profilePic: gp.picture || '',
-        username:   result.value.username,
-        nickname:   result.value.nickname,
+        username: result.value.username,
+        nickname: result.value.nickname,
         department: result.value.department,
-        roles:      'User',
+        roles: 'User',
       })
         .then((res) => {
           hideLoading();
           if (res.success && res.user) {
             App.user = res.user;
-            toast('success', 'Account Created', 'Welcome aboard, ' + res.user.nickname + '!');
+            toast('success', 'ลงทะเบียนสำเร็จ', 'ยินดีต้อนรับคุณ ' + res.user.nickname + ' เข้าสู่ระบบ');
             enterApp();
           } else {
-            toast('error', 'Error', res.error || 'Registration failed.');
+            toast('error', 'เกิดข้อผิดพลาด', res.error || 'การลงทะเบียนไม่สำเร็จ');
           }
         })
         .catch((err) => {
           hideLoading();
-          toast('error', 'Error', err.message);
+          toast('error', 'เกิดข้อผิดพลาด', err.message);
         });
     }
   });
@@ -185,38 +194,46 @@ function enterApp() {
   // Populate sidebar user card
   DOM.sidebarAvatar.src = App.user.profilePic || App.googleProfile?.picture || '';
   DOM.sidebarName.textContent = App.user.nickname || App.user.username;
-  DOM.sidebarRole.textContent = App.user.roles.join(', ');
+  DOM.sidebarRole.textContent = App.user.roles.map(r => ROLE_LABELS[r] || r).join(', ');
 
   buildSidebarNav();
   bindGlobalEvents();
 
   // Navigate to the first appropriate view
   const roles = App.user.roles;
-  if (roles.includes('Admin'))         navigateTo('admin');
+  if (roles.includes('Admin')) navigateTo('admin');
   else if (roles.includes('Designer')) navigateTo('designer');
-  else if (roles.includes('Exec2'))    navigateTo('exec2');
-  else if (roles.includes('Exec1'))    navigateTo('exec1');
-  else                                 navigateTo('user');
+  else if (roles.includes('Exec2')) navigateTo('exec2');
+  else if (roles.includes('Exec1')) navigateTo('exec1');
+  else navigateTo('user');
 }
 
 // ═══════════════════════════════════════════════════════════
 //  3. SIDEBAR NAVIGATION
 // ═══════════════════════════════════════════════════════════
 
+const ROLE_LABELS = {
+  'Admin': 'ผู้ดูแลระบบ (Admin)',
+  'Exec1': 'หัวหน้าฝ่าย (Exec1)',
+  'Exec2': 'ผู้จ่ายงาน (Exec2)',
+  'Designer': 'ดีไซเนอร์ (Designer)',
+  'User': 'ผู้ขอรับบริการ (User)',
+};
+
 const NAV_ITEMS = [
-  { id: 'user',     label: 'My Requests',    icon: 'inbox',     roles: ['User','Exec1','Exec2','Designer','Admin'] },
-  { id: 'exec1',    label: 'Acknowledge',     icon: 'check',     roles: ['Exec1','Admin'] },
-  { id: 'exec2',    label: 'Assign & Approve',icon: 'users',     roles: ['Exec2','Admin'] },
-  { id: 'designer', label: 'Design Queue',    icon: 'palette',   roles: ['Designer','Admin'] },
-  { id: 'admin',    label: 'Admin Panel',     icon: 'shield',    roles: ['Admin'] },
+  { id: 'user', label: 'คำขอของฉัน', icon: 'inbox', roles: ['User', 'Exec1', 'Exec2', 'Designer', 'Admin'] },
+  { id: 'exec1', label: 'รับทราบคำขอ (หัวหน้าฝ่าย)', icon: 'check', roles: ['Exec1', 'Admin'] },
+  { id: 'exec2', label: 'มอบหมาย & อนุมัติ (จ่ายงาน)', icon: 'users', roles: ['Exec2', 'Admin'] },
+  { id: 'designer', label: 'คิวงานออกแบบ', icon: 'palette', roles: ['Designer', 'Admin'] },
+  { id: 'admin', label: 'แผงควบคุมระบบ (Admin)', icon: 'shield', roles: ['Admin'] },
 ];
 
 const ICONS = {
-  inbox:   '<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 13.5h3.86a2.25 2.25 0 012.012 1.244l.256.512a2.25 2.25 0 002.013 1.244h3.218a2.25 2.25 0 002.013-1.244l.256-.512a2.25 2.25 0 012.013-1.244h3.859M12 3v8.25m0 0l-3-3m3 3l3-3" />',
-  check:   '<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />',
-  users:   '<path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />',
+  inbox: '<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 13.5h3.86a2.25 2.25 0 012.012 1.244l.256.512a2.25 2.25 0 002.013 1.244h3.218a2.25 2.25 0 002.013-1.244l.256-.512a2.25 2.25 0 012.013-1.244h3.859M12 3v8.25m0 0l-3-3m3 3l3-3" />',
+  check: '<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />',
+  users: '<path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />',
   palette: '<path stroke-linecap="round" stroke-linejoin="round" d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.764m3.42 3.42a6.776 6.776 0 00-3.42-3.42" />',
-  shield:  '<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />',
+  shield: '<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />',
 };
 
 function buildSidebarNav() {
@@ -249,7 +266,6 @@ function setActiveNav(viewId) {
     btn.classList.toggle('bg-white/10', isActive);
     btn.classList.toggle('text-white', isActive);
     btn.classList.toggle('text-surface-300', !isActive);
-    // icon highlight
     const icon = btn.querySelector('svg');
     if (icon) {
       icon.classList.toggle('text-brand-400', isActive);
@@ -279,23 +295,23 @@ function navigateTo(viewId) {
 
   // Load data for the view
   switch (viewId) {
-    case 'user':        loadUserView();       break;
-    case 'requestForm': loadRequestForm();    break;
-    case 'exec1':       loadExec1View();      break;
-    case 'exec2':       loadExec2View();      break;
-    case 'designer':    loadDesignerView();   break;
-    case 'admin':       loadAdminView();      break;
+    case 'user': loadUserView(); break;
+    case 'requestForm': loadRequestForm(); break;
+    case 'exec1': loadExec1View(); break;
+    case 'exec2': loadExec2View(); break;
+    case 'designer': loadDesignerView(); break;
+    case 'admin': loadAdminView(); break;
   }
 }
 
 function updateTopBar(viewId) {
   const titles = {
-    user:        ['My Requests',         'Track and manage your design requests'],
-    requestForm: ['New Request',         'Submit a new design job request'],
-    exec1:       ['Department Approval', 'Review and acknowledge pending requests'],
-    exec2:       ['Assign & Approve',    'Assign designers and approve jobs'],
-    designer:    ['Design Queue',        'Your active design assignments'],
-    admin:       ['Administration',      'Manage all jobs and users'],
+    user: ['คำขอของฉัน', 'ติดตามและตรวจสอบสถานะคำขอรับบริการงานออกแบบของคุณ'],
+    requestForm: ['สร้างคำขอใหม่', 'กรอกรายละเอียดเพื่อส่งคำขอรับบริการงานออกแบบ'],
+    exec1: ['รับทราบคำขอของแผนก', 'ตรวจสอบและรับทราบคำขอรับบริการงานออกแบบของฝ่าย'],
+    exec2: ['มอบหมายงานและอนุมัติ', 'เลือกดีไซเนอร์ผู้รับผิดชอบและอนุมัติคิวงาน'],
+    designer: ['คิวงานออกแบบ', 'รายการงานออกแบบที่ได้รับมอบหมายและบันทึกผลการดำเนินงาน'],
+    admin: ['แผงควบคุมระบบ', 'จัดการและตรวจสอบงานทั้งหมด รวมถึงสิทธิ์ผู้ใช้งาน'],
   };
   const [title, subtitle] = titles[viewId] || ['', ''];
   DOM.viewTitle.textContent = title;
@@ -306,7 +322,7 @@ function updateTopBar(viewId) {
   if (viewId === 'user') {
     actionsHtml = `<button id="newRequestBtn" class="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-brand-500 to-purple-600 hover:from-brand-600 hover:to-purple-700 shadow-md shadow-brand-500/20 transition-all hover:shadow-lg">
       <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-      New Request
+      + สร้างคำขอใหม่
     </button>`;
   }
   DOM.topBarActions.innerHTML = actionsHtml;
@@ -324,12 +340,13 @@ function bindGlobalEvents() {
   // Logout
   DOM.logoutBtn.addEventListener('click', () => {
     Swal.fire({
-      title: 'Sign Out?',
-      text: 'You will be returned to the login screen.',
+      title: 'ต้องการออกจากระบบหรือไม่?',
+      text: 'คุณจะถูกนำกลับไปยังหน้าเข้าสู่ระบบ',
       icon: 'question',
       showCancelButton: true,
       confirmButtonColor: '#6366f1',
-      confirmButtonText: 'Sign Out',
+      confirmButtonText: 'ออกจากระบบ',
+      cancelButtonText: 'ยกเลิก',
     }).then((result) => {
       if (result.isConfirmed) {
         google.accounts.id.disableAutoSelect();
@@ -375,10 +392,10 @@ function bindGlobalEvents() {
   // Admin search / filter
   const adminSearch = $('#adminSearch');
   const adminFilter = $('#adminFilterStatus');
-  const adminSort   = $('#adminSort');
+  const adminSort = $('#adminSort');
   if (adminSearch) adminSearch.addEventListener('input', debounce(renderAdminJobs, 300));
   if (adminFilter) adminFilter.addEventListener('change', renderAdminJobs);
-  if (adminSort)   adminSort.addEventListener('change', renderAdminJobs);
+  if (adminSort) adminSort.addEventListener('change', renderAdminJobs);
 
   // Designer sort
   const dSort = $('#designerSort');
@@ -406,24 +423,24 @@ function loadUserView() {
       _userJobs = res.jobs || [];
       renderUserView();
     })
-    .catch((err) => { hideLoading(); toast('error', 'Error', err.message); });
+    .catch((err) => { hideLoading(); toast('error', 'เกิดข้อผิดพลาด', err.message); });
 }
 
 function renderUserView() {
   const jobs = _userJobs;
   const statsEl = $('#userStats');
-  const listEl  = $('#userJobsList');
+  const listEl = $('#userJobsList');
   const emptyEl = $('#userEmpty');
 
   // Stats
-  const counts = { Pending:0, Acknowledged:0, 'In Progress':0, Completed:0, Cancelled:0 };
+  const counts = { Pending: 0, Acknowledged: 0, 'In Progress': 0, Completed: 0, Cancelled: 0 };
   jobs.forEach((j) => { if (counts[j.JobStatus] !== undefined) counts[j.JobStatus]++; });
 
   statsEl.innerHTML = `
-    ${_statCard('Pending', counts.Pending, 'bg-red-50 text-red-600 border-red-200')}
-    ${_statCard('Acknowledged', counts.Acknowledged, 'bg-amber-50 text-amber-600 border-amber-200')}
-    ${_statCard('In Progress', counts['In Progress'], 'bg-blue-50 text-blue-600 border-blue-200')}
-    ${_statCard('Completed', counts.Completed, 'bg-emerald-50 text-emerald-600 border-emerald-200')}
+    ${_statCard('รอรับทราบ', counts.Pending, 'bg-red-50 text-red-600 border-red-200')}
+    ${_statCard('รับทราบแล้ว', counts.Acknowledged, 'bg-amber-50 text-amber-600 border-amber-200')}
+    ${_statCard('กำลังดำเนินการ', counts['In Progress'], 'bg-blue-50 text-blue-600 border-blue-200')}
+    ${_statCard('เสร็จสิ้นแล้ว', counts.Completed, 'bg-emerald-50 text-emerald-600 border-emerald-200')}
   `;
 
   if (jobs.length === 0) {
@@ -443,12 +460,12 @@ function renderUserView() {
           </div>
           <p class="text-xs text-surface-400 mb-2">${_esc(job.JobID)}</p>
           <div class="flex flex-wrap gap-x-5 gap-y-1 text-sm text-surface-500">
-            <span>📂 ${_esc(job.Department)}</span>
-            <span>🎨 ${_esc(job.JobCategory)}${job.JobDetails ? ' — ' + _esc(job.JobDetails) : ''}</span>
-            <span>📅 Due: ${_esc(job.DueDate)}</span>
-            ${job.AssignedDesigner ? '<span>👤 Designer: ' + _esc(job.AssignedDesigner) + '</span>' : ''}
+            <span>📂 แผนก: ${_esc(job.Department)}</span>
+            <span>🎨 ประเภท: ${_esc(job.JobCategory)}${job.JobDetails ? ' — ' + _esc(job.JobDetails) : ''}</span>
+            <span>📅 กำหนดส่ง: ${_esc(job.DueDate)}</span>
+            ${job.AssignedDesigner ? '<span>👤 ดีไซเนอร์: ' + _esc(job.AssignedDesigner) + '</span>' : ''}
           </div>
-          ${job.CancelReason ? '<p class="mt-2 text-sm text-red-500">❌ Reason: ' + _esc(job.CancelReason) + '</p>' : ''}
+          ${job.CancelReason ? '<p class="mt-2 text-sm text-red-500">❌ เหตุผลยกเลิก: ' + _esc(job.CancelReason) + '</p>' : ''}
         </div>
       </div>
     </div>
@@ -466,47 +483,48 @@ function _statCard(label, count, colorClasses) {
 
 function loadRequestForm() {
   const now = new Date();
-  $('#rfDate').value  = now.toLocaleDateString('en-CA'); // YYYY-MM-DD
+  $('#rfDate').value = now.toLocaleDateString('en-CA'); // YYYY-MM-DD
   $('#rfEmail').value = App.user.email;
-  $('#rfName').value  = App.user.username || App.user.nickname;
+  $('#rfName').value = App.user.username || App.user.nickname;
   $('#rfDepartment').value = App.user.department || '';
 
   // Reset dynamic fields
-  $('#rfCategory').value       = '';
+  $('#rfCategory').value = '';
   $('#rfQtyWrap').classList.add('hidden');
-  $('#rfQty').value            = '';
-  $('#rfProject').value        = '';
-  $('#rfUseDate').value        = '';
-  $('#rfDueDate').value        = '';
-  $('#rfDelivery').value       = '';
+  $('#rfQty').value = '';
+  $('#rfProject').value = '';
+  $('#rfUseDate').value = '';
+  $('#rfDueDate').value = '';
+  $('#rfDelivery').value = '';
   $('#rfDeliveryDetailWrap').classList.add('hidden');
   $('#rfDeliveryDetail').value = '';
-  $('#rfDetails').value        = '';
+  $('#rfDetails').value = '';
 }
 
 function handleRequestSubmit(e) {
   e.preventDefault();
 
   const payload = {
-    requesterEmail:  $('#rfEmail').value,
-    requesterName:   $('#rfName').value,
-    department:      $('#rfDepartment').value.trim(),
-    jobCategory:     $('#rfCategory').value,
-    jobDetails:      _buildJobDetails(),
-    projectName:     $('#rfProject').value.trim(),
-    useDate:         $('#rfUseDate').value,
-    deliveryMethod:  $('#rfDelivery').value,
-    deliveryDetail:  $('#rfDeliveryDetail').value.trim(),
-    dueDate:         $('#rfDueDate').value,
+    requesterEmail: $('#rfEmail').value,
+    requesterName: $('#rfName').value,
+    department: $('#rfDepartment').value.trim(),
+    jobCategory: $('#rfCategory').value,
+    jobDetails: _buildJobDetails(),
+    projectName: $('#rfProject').value.trim(),
+    useDate: $('#rfUseDate').value,
+    deliveryMethod: $('#rfDelivery').value,
+    deliveryDetail: $('#rfDeliveryDetail').value.trim(),
+    dueDate: $('#rfDueDate').value,
   };
 
   Swal.fire({
-    title: 'Submit Request?',
-    html: `<p class="text-sm text-gray-500">Project: <strong>${_esc(payload.projectName)}</strong></p>`,
+    title: 'ยืนยันการส่งคำขอรับบริการ?',
+    html: `<p class="text-sm text-gray-500">ชื่องาน/โครงการ: <strong>${_esc(payload.projectName)}</strong></p>`,
     icon: 'question',
     showCancelButton: true,
     confirmButtonColor: '#6366f1',
-    confirmButtonText: 'Submit',
+    confirmButtonText: 'ยืนยันส่งคำขอ',
+    cancelButtonText: 'ยกเลิก',
   }).then((result) => {
     if (!result.isConfirmed) return;
 
@@ -515,13 +533,13 @@ function handleRequestSubmit(e) {
       .then((res) => {
         hideLoading();
         if (res.success) {
-          toast('success', 'Submitted!', res.message);
+          toast('success', 'ส่งคำขอสำเร็จ!', 'บันทึกคำขอรับบริการงานออกแบบเรียบร้อยแล้ว');
           navigateTo('user');
         } else {
-          toast('error', 'Error', res.error);
+          toast('error', 'เกิดข้อผิดพลาด', res.error);
         }
       })
-      .catch((err) => { hideLoading(); toast('error', 'Error', err.message); });
+      .catch((err) => { hideLoading(); toast('error', 'เกิดข้อผิดพลาด', err.message); });
   });
 }
 
@@ -530,7 +548,7 @@ function _buildJobDetails() {
   const cat = $('#rfCategory').value;
   if (cat === 'Print') {
     const qty = $('#rfQty').value;
-    if (qty) parts.push('Qty: ' + qty);
+    if (qty) parts.push('จำนวน: ' + qty + ' ชุด/แผ่น');
   }
   const extra = $('#rfDetails').value.trim();
   if (extra) parts.push(extra);
@@ -546,11 +564,11 @@ function loadExec1View() {
       hideLoading();
       renderExec1(res.jobs || []);
     })
-    .catch((err) => { hideLoading(); toast('error', 'Error', err.message); });
+    .catch((err) => { hideLoading(); toast('error', 'เกิดข้อผิดพลาด', err.message); });
 }
 
 function renderExec1(jobs) {
-  const listEl  = $('#exec1List');
+  const listEl = $('#exec1List');
   const emptyEl = $('#exec1Empty');
 
   if (jobs.length === 0) {
@@ -569,16 +587,16 @@ function renderExec1(jobs) {
             ${_statusBadge(job.JobStatus)}
           </div>
           <div class="flex flex-wrap gap-x-5 gap-y-1 text-sm text-surface-500 mt-1">
-            <span>👤 ${_esc(job.RequesterName)}</span>
-            <span>🎨 ${_esc(job.JobCategory)}</span>
-            <span>📅 Due: ${_esc(job.DueDate)}</span>
-            <span>📨 Delivery: ${_esc(job.DeliveryMethod)}</span>
+            <span>👤 ผู้ขอ: ${_esc(job.RequesterName)}</span>
+            <span>🎨 ประเภท: ${_esc(job.JobCategory)}</span>
+            <span>📅 กำหนดส่ง: ${_esc(job.DueDate)}</span>
+            <span>📨 รับงาน: ${_esc(job.DeliveryMethod)}</span>
           </div>
           ${job.JobDetails ? '<p class="text-sm text-surface-400 mt-1">' + _esc(job.JobDetails) + '</p>' : ''}
         </div>
         <button onclick="handleAcknowledge('${_esc(job.JobID)}')"
                 class="flex-shrink-0 px-4 py-2 rounded-xl text-sm font-semibold text-white bg-emerald-500 hover:bg-emerald-600 shadow-sm transition-all">
-          ✓ Acknowledge
+          ✓ รับทราบคำขอ
         </button>
       </div>
     </div>
@@ -587,12 +605,13 @@ function renderExec1(jobs) {
 
 function handleAcknowledge(jobId) {
   Swal.fire({
-    title: 'Acknowledge Request?',
-    text: 'This will forward the job for designer assignment.',
+    title: 'ยืนยันการรับทราบคำขอ?',
+    text: 'คำขอนี้จะถูกส่งต่อไปยังขั้นตอนการจ่ายงานและเลือกดีไซเนอร์',
     icon: 'question',
     showCancelButton: true,
     confirmButtonColor: '#10b981',
-    confirmButtonText: 'Acknowledge',
+    confirmButtonText: 'รับทราบคำขอ',
+    cancelButtonText: 'ยกเลิก',
   }).then((result) => {
     if (!result.isConfirmed) return;
     showLoading();
@@ -604,11 +623,11 @@ function handleAcknowledge(jobId) {
       .then((res) => {
         hideLoading();
         if (res.success) {
-          toast('success', 'Acknowledged', res.message);
+          toast('success', 'รับทราบสำเร็จ', 'ส่งต่องานไปยังขั้นตอนมอบหมายเรียบร้อยแล้ว');
           loadExec1View();
-        } else { toast('error', 'Error', res.error); }
+        } else { toast('error', 'เกิดข้อผิดพลาด', res.error); }
       })
-      .catch((err) => { hideLoading(); toast('error', 'Error', err.message); });
+      .catch((err) => { hideLoading(); toast('error', 'เกิดข้อผิดพลาด', err.message); });
   });
 }
 
@@ -625,11 +644,11 @@ function loadExec2View() {
       App.designers = designersRes.designers || [];
       renderExec2(jobsRes.jobs || []);
     })
-    .catch((err) => { hideLoading(); toast('error', 'Error', err.message); });
+    .catch((err) => { hideLoading(); toast('error', 'เกิดข้อผิดพลาด', err.message); });
 }
 
 function renderExec2(jobs) {
-  const listEl  = $('#exec2List');
+  const listEl = $('#exec2List');
   const emptyEl = $('#exec2Empty');
 
   if (jobs.length === 0) {
@@ -652,25 +671,25 @@ function renderExec2(jobs) {
             ${_statusBadge(job.JobStatus)}
           </div>
           <div class="flex flex-wrap gap-x-5 gap-y-1 text-sm text-surface-500 mt-1">
-            <span>👤 ${_esc(job.RequesterName)}</span>
-            <span>📂 ${_esc(job.Department)}</span>
-            <span>🎨 ${_esc(job.JobCategory)}</span>
-            <span>📅 Due: ${_esc(job.DueDate)}</span>
+            <span>👤 ผู้ขอ: ${_esc(job.RequesterName)}</span>
+            <span>📂 แผนก: ${_esc(job.Department)}</span>
+            <span>🎨 ประเภท: ${_esc(job.JobCategory)}</span>
+            <span>📅 กำหนดส่ง: ${_esc(job.DueDate)}</span>
           </div>
-          <p class="text-xs text-surface-400 mt-1">Approved by: ${_esc(job.Exec1_Name)}</p>
+          <p class="text-xs text-surface-400 mt-1">รับทราบโดย: ${_esc(job.Exec1_Name)}</p>
         </div>
         <div class="flex items-center gap-2 flex-shrink-0">
           <select id="designer-${_esc(job.JobID)}" class="px-3 py-2 rounded-xl border border-surface-200 text-sm focus:ring-2 focus:ring-brand-400">
-            <option value="">Select Designer…</option>
+            <option value="">เลือกดีไซเนอร์ผู้รับผิดชอบ…</option>
             ${designerOptions}
           </select>
           <button onclick="handleExec2Approve('${_esc(job.JobID)}')"
                   class="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-brand-500 hover:bg-brand-600 shadow-sm transition-all">
-            Approve
+            อนุมัติ & จ่ายงาน
           </button>
           <button onclick="handleExec2Cancel('${_esc(job.JobID)}')"
                   class="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-red-500 hover:bg-red-600 shadow-sm transition-all">
-            Cancel
+            ยกเลิกงาน
           </button>
         </div>
       </div>
@@ -681,17 +700,18 @@ function renderExec2(jobs) {
 function handleExec2Approve(jobId) {
   const designerEmail = $(`#designer-${jobId}`)?.value;
   if (!designerEmail) {
-    toast('warning', 'Select a Designer', 'Please choose a designer before approving.');
+    toast('warning', 'โปรดระบุดีไซเนอร์', 'กรุณาเลือกดีไซเนอร์ผู้รับผิดชอบก่อนกดอนุมัติ');
     return;
   }
 
   Swal.fire({
-    title: 'Approve & Assign?',
-    text: 'The designer and requester will receive email notifications.',
+    title: 'ยืนยันการอนุมัติและมอบหมายงาน?',
+    text: 'ระบบจะส่งอีเมลแจ้งเตือนไปยังดีไซเนอร์และผู้ขอรับบริการโดยอัตโนมัติ',
     icon: 'question',
     showCancelButton: true,
     confirmButtonColor: '#6366f1',
-    confirmButtonText: 'Approve',
+    confirmButtonText: 'อนุมัติงาน',
+    cancelButtonText: 'ยกเลิก',
   }).then((result) => {
     if (!result.isConfirmed) return;
     showLoading();
@@ -704,25 +724,26 @@ function handleExec2Approve(jobId) {
       .then((res) => {
         hideLoading();
         if (res.success) {
-          toast('success', 'Approved!', res.message);
+          toast('success', 'อนุมัติสำเร็จ!', res.message);
           loadExec2View();
-        } else { toast('error', 'Error', res.error); }
+        } else { toast('error', 'เกิดข้อผิดพลาด', res.error); }
       })
-      .catch((err) => { hideLoading(); toast('error', 'Error', err.message); });
+      .catch((err) => { hideLoading(); toast('error', 'เกิดข้อผิดพลาด', err.message); });
   });
 }
 
 function handleExec2Cancel(jobId) {
   Swal.fire({
-    title: 'Cancel Job?',
+    title: 'ต้องการยกเลิกคำขอนี้หรือไม่?',
     input: 'textarea',
-    inputLabel: 'Reason for cancellation',
-    inputPlaceholder: 'Please explain why this job is being cancelled…',
-    inputValidator: (value) => { if (!value) return 'A reason is required.'; },
+    inputLabel: 'ระบุเหตุผลในการยกเลิก',
+    inputPlaceholder: 'โปรดอธิบายสาเหตุที่ต้องยกเลิกงานนี้เพื่อแจ้งผู้ขอ…',
+    inputValidator: (value) => { if (!value) return 'กรุณาระบุเหตุผลในการยกเลิก'; },
     icon: 'warning',
     showCancelButton: true,
     confirmButtonColor: '#ef4444',
-    confirmButtonText: 'Cancel Job',
+    confirmButtonText: 'ยืนยันยกเลิกงาน',
+    cancelButtonText: 'ย้อนกลับ',
   }).then((result) => {
     if (!result.isConfirmed) return;
     showLoading();
@@ -735,11 +756,11 @@ function handleExec2Cancel(jobId) {
       .then((res) => {
         hideLoading();
         if (res.success) {
-          toast('success', 'Cancelled', res.message);
+          toast('success', 'ยกเลิกงานสำเร็จ', res.message);
           loadExec2View();
-        } else { toast('error', 'Error', res.error); }
+        } else { toast('error', 'เกิดข้อผิดพลาด', res.error); }
       })
-      .catch((err) => { hideLoading(); toast('error', 'Error', err.message); });
+      .catch((err) => { hideLoading(); toast('error', 'เกิดข้อผิดพลาด', err.message); });
   });
 }
 
@@ -755,7 +776,7 @@ function loadDesignerView() {
       _designerJobs = res.jobs || [];
       switchDesignerTab(App.designerTab);
     })
-    .catch((err) => { hideLoading(); toast('error', 'Error', err.message); });
+    .catch((err) => { hideLoading(); toast('error', 'เกิดข้อผิดพลาด', err.message); });
 }
 
 function switchDesignerTab(tabName) {
@@ -780,9 +801,9 @@ function switchDesignerTab(tabName) {
   $('#designerPlaceholderList').classList.toggle('hidden', tabName !== 'placeholder');
   $('#designerHistoryList').classList.toggle('hidden', tabName !== 'history');
 
-  if (tabName === 'active')      renderDesignerActive();
+  if (tabName === 'active') renderDesignerActive();
   if (tabName === 'placeholder') renderDesignerPlaceholders();
-  if (tabName === 'history')     renderDesignerHistory();
+  if (tabName === 'history') renderDesignerHistory();
 }
 
 function renderDesignerActive() {
@@ -799,7 +820,7 @@ function renderDesignerActive() {
     return String(keyA).localeCompare(String(keyB));
   });
 
-  const listEl  = $('#designerActiveList');
+  const listEl = $('#designerActiveList');
   const emptyEl = $('#designerEmpty');
 
   if (activeJobs.length === 0) {
@@ -818,17 +839,17 @@ function renderDesignerActive() {
             ${_statusBadge(job.JobStatus)}
           </div>
           <div class="flex flex-wrap gap-x-5 gap-y-1 text-sm text-surface-500 mt-1">
-            <span>👤 ${_esc(job.RequesterName)}</span>
-            <span>📂 ${_esc(job.Department)}</span>
-            <span>🎨 ${_esc(job.JobCategory)}</span>
-            <span>📅 Due: ${_esc(job.DueDate)}</span>
-            <span>📨 ${_esc(job.DeliveryMethod)}</span>
+            <span>👤 ผู้ขอ: ${_esc(job.RequesterName)}</span>
+            <span>📂 แผนก: ${_esc(job.Department)}</span>
+            <span>🎨 ประเภท: ${_esc(job.JobCategory)}</span>
+            <span>📅 กำหนดส่ง: ${_esc(job.DueDate)}</span>
+            <span>📨 รับงาน: ${_esc(job.DeliveryMethod)}</span>
           </div>
           ${job.JobDetails ? '<p class="text-sm text-surface-400 mt-1">' + _esc(job.JobDetails) + '</p>' : ''}
         </div>
         <button onclick="handleComplete('${_esc(job.JobID)}')"
                 class="flex-shrink-0 px-4 py-2 rounded-xl text-sm font-semibold text-white bg-emerald-500 hover:bg-emerald-600 shadow-sm transition-all">
-          ✓ Complete
+          ✓ เสร็จสิ้นงาน
         </button>
       </div>
     </div>
@@ -838,11 +859,11 @@ function renderDesignerActive() {
 function renderDesignerPlaceholders() {
   const placeholders = _designerJobs.filter((j) => j.JobStatus === 'Acknowledged');
 
-  const listEl  = $('#designerPlaceholderList');
+  const listEl = $('#designerPlaceholderList');
   const emptyEl = $('#designerEmpty');
 
   if (placeholders.length === 0) {
-    listEl.innerHTML = '<div class="text-center py-12 text-surface-400 text-sm">No upcoming jobs in the pipeline.</div>';
+    listEl.innerHTML = '<div class="text-center py-12 text-surface-400 text-sm">ไม่มีงานที่รออยู่ในขั้นตอนถัดไป</div>';
     emptyEl.classList.add('hidden');
     return;
   }
@@ -852,13 +873,13 @@ function renderDesignerPlaceholders() {
     <div class="bg-surface-50 rounded-xl border border-dashed border-surface-300 p-5 opacity-70">
       <div class="flex items-center gap-2 mb-1">
         <h3 class="font-medium text-surface-600 truncate">${_esc(job.ProjectName)}</h3>
-        <span class="status-badge bg-surface-200 text-surface-500">Awaiting Assignment</span>
+        <span class="status-badge bg-surface-200 text-surface-500">รอมอบหมายดีไซเนอร์</span>
       </div>
       <div class="flex flex-wrap gap-x-5 gap-y-1 text-sm text-surface-400 mt-1">
-        <span>👤 ${_esc(job.RequesterName)}</span>
-        <span>📂 ${_esc(job.Department)}</span>
-        <span>🎨 ${_esc(job.JobCategory)}</span>
-        <span>📅 Due: ${_esc(job.DueDate)}</span>
+        <span>👤 ผู้ขอ: ${_esc(job.RequesterName)}</span>
+        <span>📂 แผนก: ${_esc(job.Department)}</span>
+        <span>🎨 ประเภท: ${_esc(job.JobCategory)}</span>
+        <span>📅 กำหนดส่ง: ${_esc(job.DueDate)}</span>
       </div>
     </div>
   `).join('');
@@ -873,7 +894,7 @@ function renderDesignerHistory() {
   const listEl = $('#designerHistoryList');
 
   if (completed.length === 0) {
-    listEl.innerHTML = '<div class="text-center py-12 text-surface-400 text-sm">No completed jobs yet.</div>';
+    listEl.innerHTML = '<div class="text-center py-12 text-surface-400 text-sm">ยังไม่มีประวัติงานที่เสร็จสิ้น</div>';
     return;
   }
 
@@ -884,23 +905,24 @@ function renderDesignerHistory() {
         ${_statusBadge(job.JobStatus)}
       </div>
       <div class="flex flex-wrap gap-x-5 gap-y-1 text-sm text-surface-400 mt-1">
-        <span>📂 ${_esc(job.Department)}</span>
-        <span>🎨 ${_esc(job.JobCategory)}</span>
-        ${job.CompletedDate ? '<span>✅ Completed: ' + _esc(job.CompletedDate) + '</span>' : ''}
+        <span>📂 แผนก: ${_esc(job.Department)}</span>
+        <span>🎨 ประเภท: ${_esc(job.JobCategory)}</span>
+        ${job.CompletedDate ? '<span>✅ เสร็จเมื่อ: ' + _esc(job.CompletedDate) + '</span>' : ''}
       </div>
-      ${job.CancelReason ? '<p class="text-sm text-red-400 mt-1">❌ ' + _esc(job.CancelReason) + '</p>' : ''}
+      ${job.CancelReason ? '<p class="text-sm text-red-400 mt-1">❌ เหตุผลยกเลิก: ' + _esc(job.CancelReason) + '</p>' : ''}
     </div>
   `).join('');
 }
 
 function handleComplete(jobId) {
   Swal.fire({
-    title: 'Mark as Complete?',
-    text: 'This job will be moved to your history.',
+    title: 'ยืนยันการเสร็จสิ้นงาน?',
+    text: 'งานนี้จะถูกบันทึกว่าเสร็จสมบูรณ์และย้ายไปยังประวัติงาน',
     icon: 'question',
     showCancelButton: true,
     confirmButtonColor: '#10b981',
-    confirmButtonText: 'Complete',
+    confirmButtonText: 'เสร็จสิ้นงาน',
+    cancelButtonText: 'ยกเลิก',
   }).then((result) => {
     if (!result.isConfirmed) return;
     showLoading();
@@ -908,17 +930,17 @@ function handleComplete(jobId) {
       .then((res) => {
         hideLoading();
         if (res.success) {
-          toast('success', 'Completed!', res.message);
+          toast('success', 'เสร็จสิ้นงาน!', res.message);
           loadDesignerView();
-        } else { toast('error', 'Error', res.error); }
+        } else { toast('error', 'เกิดข้อผิดพลาด', res.error); }
       })
-      .catch((err) => { hideLoading(); toast('error', 'Error', err.message); });
+      .catch((err) => { hideLoading(); toast('error', 'เกิดข้อผิดพลาด', err.message); });
   });
 }
 
 // ─── 6f. Admin View ─────────────────────────────────────────
 
-let _adminJobs  = [];
+let _adminJobs = [];
 let _adminUsers = [];
 
 function loadAdminView() {
@@ -930,12 +952,12 @@ function loadAdminView() {
   ])
     .then(([jobsRes, usersRes, designersRes]) => {
       hideLoading();
-      _adminJobs  = jobsRes.jobs || [];
+      _adminJobs = jobsRes.jobs || [];
       _adminUsers = usersRes.users || [];
       App.designers = designersRes.designers || [];
       switchAdminTab(App.adminTab);
     })
-    .catch((err) => { hideLoading(); toast('error', 'Error', err.message); });
+    .catch((err) => { hideLoading(); toast('error', 'เกิดข้อผิดพลาด', err.message); });
 }
 
 function switchAdminTab(tabName) {
@@ -954,7 +976,7 @@ function switchAdminTab(tabName) {
   $('#adminJobsPanel').classList.toggle('hidden', tabName !== 'jobs');
   $('#adminUsersPanel').classList.toggle('hidden', tabName !== 'users');
 
-  if (tabName === 'jobs')  renderAdminJobs();
+  if (tabName === 'jobs') renderAdminJobs();
   if (tabName === 'users') renderAdminUsers();
 }
 
@@ -962,7 +984,7 @@ function renderAdminJobs() {
   let jobs = [..._adminJobs];
   const search = ($('#adminSearch')?.value || '').toLowerCase();
   const status = $('#adminFilterStatus')?.value || '';
-  const sort   = $('#adminSort')?.value || 'newest';
+  const sort = $('#adminSort')?.value || 'newest';
 
   // Filter
   if (search) {
@@ -979,15 +1001,15 @@ function renderAdminJobs() {
 
   // Sort
   jobs.sort((a, b) => {
-    if (sort === 'newest')  return String(b.RequestDate).localeCompare(String(a.RequestDate));
-    if (sort === 'oldest')  return String(a.RequestDate).localeCompare(String(b.RequestDate));
+    if (sort === 'newest') return String(b.RequestDate).localeCompare(String(a.RequestDate));
+    if (sort === 'oldest') return String(a.RequestDate).localeCompare(String(b.RequestDate));
     if (sort === 'dueDate') return String(a.DueDate).localeCompare(String(b.DueDate));
     return 0;
   });
 
   const tbody = $('#adminJobsBody');
   if (jobs.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-surface-400">No jobs found.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-surface-400">ไม่พบข้อมูลคำของาน</td></tr>';
     return;
   }
 
@@ -1005,11 +1027,11 @@ function renderAdminJobs() {
       <td class="px-4 py-3 text-surface-600 truncate max-w-[120px]">${_esc(job.AssignedDesigner || '—')}</td>
       <td class="px-4 py-3">
         <div class="flex items-center justify-center gap-1">
-          <button onclick="adminEditJob('${_esc(job.JobID)}')" title="Edit"
+          <button onclick="adminEditJob('${_esc(job.JobID)}')" title="แก้ไขข้อมูล"
                   class="p-1.5 rounded-lg hover:bg-brand-50 text-brand-500 transition">
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>
           </button>
-          <button onclick="adminDeleteJob('${_esc(job.JobID)}')" title="Delete"
+          <button onclick="adminDeleteJob('${_esc(job.JobID)}')" title="ลบรายการ"
                   class="p-1.5 rounded-lg hover:bg-red-50 text-red-500 transition">
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>
           </button>
@@ -1027,44 +1049,53 @@ function adminEditJob(jobId) {
     `<option value="${_esc(d.email)}" ${job.AssignedDesigner === d.email ? 'selected' : ''}>${_esc(d.username)}</option>`
   ).join('');
 
+  const statusOptions = [
+    { val: 'Pending', label: 'รอรับทราบ (Pending)' },
+    { val: 'Acknowledged', label: 'รับทราบแล้ว (Acknowledged)' },
+    { val: 'In Progress', label: 'กำลังดำเนินการ (In Progress)' },
+    { val: 'Completed', label: 'เสร็จสิ้นแล้ว (Completed)' },
+    { val: 'Cancelled', label: 'ยกเลิกแล้ว (Cancelled)' },
+  ];
+
   Swal.fire({
-    title: 'Edit Job',
+    title: 'แก้ไขข้อมูลคำขอ',
     html: `
       <div class="text-left space-y-3">
         <div>
-          <label class="block text-xs font-semibold text-gray-500 mb-1">Project Name</label>
+          <label class="block text-xs font-semibold text-gray-500 mb-1">ชื่องาน / โครงการ</label>
           <input id="editProject" class="swal2-input !mt-0 !text-sm" value="${_esc(job.ProjectName)}" />
         </div>
         <div>
-          <label class="block text-xs font-semibold text-gray-500 mb-1">Status</label>
+          <label class="block text-xs font-semibold text-gray-500 mb-1">สถานะงาน</label>
           <select id="editStatus" class="swal2-select !mt-0 !text-sm">
-            ${['Pending','Acknowledged','In Progress','Completed','Cancelled'].map((s) =>
-              `<option value="${s}" ${job.JobStatus === s ? 'selected' : ''}>${s}</option>`
-            ).join('')}
+            ${statusOptions.map((s) =>
+      `<option value="${s.val}" ${job.JobStatus === s.val ? 'selected' : ''}>${s.label}</option>`
+    ).join('')}
           </select>
         </div>
         <div>
-          <label class="block text-xs font-semibold text-gray-500 mb-1">Assigned Designer</label>
+          <label class="block text-xs font-semibold text-gray-500 mb-1">ดีไซเนอร์ผู้รับผิดชอบ</label>
           <select id="editDesigner" class="swal2-select !mt-0 !text-sm">
-            <option value="">— None —</option>
+            <option value="">— ไม่ระบุ —</option>
             ${designerOptions}
           </select>
         </div>
         <div>
-          <label class="block text-xs font-semibold text-gray-500 mb-1">Due Date</label>
+          <label class="block text-xs font-semibold text-gray-500 mb-1">กำหนดส่งงาน (Due Date)</label>
           <input id="editDueDate" type="date" class="swal2-input !mt-0 !text-sm" value="${_esc(job.DueDate)}" />
         </div>
       </div>
     `,
     showCancelButton: true,
     confirmButtonColor: '#6366f1',
-    confirmButtonText: 'Save',
+    confirmButtonText: 'บันทึกข้อมูล',
+    cancelButtonText: 'ยกเลิก',
     preConfirm: () => {
       return {
-        ProjectName:      document.getElementById('editProject').value.trim(),
-        JobStatus:        document.getElementById('editStatus').value,
+        ProjectName: document.getElementById('editProject').value.trim(),
+        JobStatus: document.getElementById('editStatus').value,
         AssignedDesigner: document.getElementById('editDesigner').value,
-        DueDate:          document.getElementById('editDueDate').value,
+        DueDate: document.getElementById('editDueDate').value,
       };
     },
   }).then((result) => {
@@ -1074,22 +1105,23 @@ function adminEditJob(jobId) {
       .then((res) => {
         hideLoading();
         if (res.success) {
-          toast('success', 'Updated', res.message);
+          toast('success', 'บันทึกสำเร็จ', 'อัปเดตข้อมูลคำขอเรียบร้อยแล้ว');
           loadAdminView();
-        } else { toast('error', 'Error', res.error); }
+        } else { toast('error', 'เกิดข้อผิดพลาด', res.error); }
       })
-      .catch((err) => { hideLoading(); toast('error', 'Error', err.message); });
+      .catch((err) => { hideLoading(); toast('error', 'เกิดข้อผิดพลาด', err.message); });
   });
 }
 
 function adminDeleteJob(jobId) {
   Swal.fire({
-    title: 'Delete Job?',
-    text: 'This action cannot be undone.',
+    title: 'ต้องการลบคำขอนี้หรือไม่?',
+    text: 'การกระทำนี้ไม่สามารถย้อนกลับได้ ข้อมูลจะถูกลบถาวร',
     icon: 'warning',
     showCancelButton: true,
     confirmButtonColor: '#ef4444',
-    confirmButtonText: 'Delete',
+    confirmButtonText: 'ยืนยันลบ',
+    cancelButtonText: 'ยกเลิก',
   }).then((result) => {
     if (!result.isConfirmed) return;
     showLoading();
@@ -1097,11 +1129,11 @@ function adminDeleteJob(jobId) {
       .then((res) => {
         hideLoading();
         if (res.success) {
-          toast('success', 'Deleted', res.message);
+          toast('success', 'ลบสำเร็จ', 'ลบคำของานเรียบร้อยแล้ว');
           loadAdminView();
-        } else { toast('error', 'Error', res.error); }
+        } else { toast('error', 'เกิดข้อผิดพลาด', res.error); }
       })
-      .catch((err) => { hideLoading(); toast('error', 'Error', err.message); });
+      .catch((err) => { hideLoading(); toast('error', 'เกิดข้อผิดพลาด', err.message); });
   });
 }
 
@@ -1109,13 +1141,19 @@ function adminDeleteJob(jobId) {
 
 function renderAdminUsers() {
   const tbody = $('#adminUsersBody');
-  const allRoles = ['User', 'Exec1', 'Exec2', 'Designer', 'Admin'];
+  const allRoles = [
+    { code: 'User', label: 'User (ผู้ขอ)' },
+    { code: 'Exec1', label: 'Exec1 (หัวหน้าฝ่าย)' },
+    { code: 'Exec2', label: 'Exec2 (ผู้จ่ายงาน)' },
+    { code: 'Designer', label: 'Designer (ดีไซเนอร์)' },
+    { code: 'Admin', label: 'Admin (แอดมิน)' },
+  ];
 
   tbody.innerHTML = _adminUsers.map((user) => {
     const checkboxes = allRoles.map((r) => {
-      const checked = user.roles.includes(r) ? 'checked' : '';
+      const checked = user.roles.includes(r.code) ? 'checked' : '';
       return `<label class="inline-flex items-center gap-1 text-xs">
-        <input type="checkbox" value="${r}" ${checked} class="role-cb rounded border-surface-300 text-brand-500 focus:ring-brand-400" data-email="${_esc(user.email)}" /> ${r}
+        <input type="checkbox" value="${r.code}" ${checked} class="role-cb rounded border-surface-300 text-brand-500 focus:ring-brand-400" data-email="${_esc(user.email)}" /> ${r.label}
       </label>`;
     }).join(' ');
 
@@ -1124,9 +1162,9 @@ function renderAdminUsers() {
         <td class="px-4 py-3">
           <div class="flex items-center gap-2">
             ${user.profilePic
-              ? `<img src="${_esc(user.profilePic)}" class="w-7 h-7 rounded-full object-cover" />`
-              : `<div class="w-7 h-7 rounded-full bg-brand-100 flex items-center justify-center text-brand-600 text-xs font-bold">${(user.username || 'U').charAt(0).toUpperCase()}</div>`
-            }
+        ? `<img src="${_esc(user.profilePic)}" class="w-7 h-7 rounded-full object-cover" />`
+        : `<div class="w-7 h-7 rounded-full bg-brand-100 flex items-center justify-center text-brand-600 text-xs font-bold">${(user.username || 'U').charAt(0).toUpperCase()}</div>`
+      }
             <div>
               <p class="font-medium text-surface-900 text-sm">${_esc(user.username)}</p>
               <p class="text-xs text-surface-400">${_esc(user.nickname)}</p>
@@ -1136,7 +1174,8 @@ function renderAdminUsers() {
         <td class="px-4 py-3 text-surface-600 text-sm">${_esc(user.email)}</td>
         <td class="px-4 py-3">
           <input type="text" value="${_esc(user.department)}" data-dept-email="${_esc(user.email)}"
-                 class="dept-input px-2 py-1 rounded-lg border border-surface-200 text-sm w-32 focus:ring-2 focus:ring-brand-400" />
+                 placeholder="ระบุแผนก"
+                 class="dept-input px-2 py-1 rounded-lg border border-surface-200 text-sm w-36 focus:ring-2 focus:ring-brand-400" />
         </td>
         <td class="px-4 py-3">
           <div class="flex flex-wrap gap-2">${checkboxes}</div>
@@ -1144,7 +1183,7 @@ function renderAdminUsers() {
         <td class="px-4 py-3 text-center">
           <button onclick="adminSaveUser('${_esc(user.email)}')"
                   class="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-brand-500 hover:bg-brand-600 transition">
-            Save
+            บันทึก
           </button>
         </td>
       </tr>
@@ -1159,7 +1198,7 @@ function adminSaveUser(email) {
   checkboxes.forEach((cb) => { if (cb.checked) roles.push(cb.value); });
 
   if (roles.length === 0) {
-    toast('warning', 'At least one role', 'A user must have at least one role.');
+    toast('warning', 'ต้องมีอย่างน้อยหนึ่งบทบาท', 'ผู้ใช้งานต้องมีสิทธิ์อย่างน้อย 1 บทบาท');
     return;
   }
 
@@ -1176,13 +1215,13 @@ function adminSaveUser(email) {
     .then((res) => {
       hideLoading();
       if (res.success) {
-        toast('success', 'Saved', res.message);
+        toast('success', 'บันทึกสำเร็จ', 'อัปเดตสิทธิ์และฝ่ายของผู้ใช้เรียบร้อยแล้ว');
         // Update local cache
         const u = _adminUsers.find((u) => u.email === email);
         if (u) { u.roles = roles; u.department = department; }
-      } else { toast('error', 'Error', res.error); }
+      } else { toast('error', 'เกิดข้อผิดพลาด', res.error); }
     })
-    .catch((err) => { hideLoading(); toast('error', 'Error', err.message); });
+    .catch((err) => { hideLoading(); toast('error', 'เกิดข้อผิดพลาด', err.message); });
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1246,17 +1285,17 @@ function _esc(str) {
   return div.innerHTML;
 }
 
-/** Status badge HTML */
+/** Status badge HTML with Thai label */
 function _statusBadge(status) {
-  const map = {
-    'Pending':      'bg-red-100 text-red-700',
-    'Acknowledged': 'bg-amber-100 text-amber-700',
-    'In Progress':  'bg-blue-100 text-blue-700',
-    'Completed':    'bg-emerald-100 text-emerald-700',
-    'Cancelled':    'bg-surface-200 text-surface-500',
+  const badgeConfig = {
+    'Pending':      { cls: 'bg-red-100 text-red-700', text: 'รอรับทราบ' },
+    'Acknowledged': { cls: 'bg-amber-100 text-amber-700', text: 'รับทราบแล้ว' },
+    'In Progress':  { cls: 'bg-blue-100 text-blue-700', text: 'กำลังดำเนินการ' },
+    'Completed':    { cls: 'bg-emerald-100 text-emerald-700', text: 'เสร็จสิ้นแล้ว' },
+    'Cancelled':    { cls: 'bg-surface-200 text-surface-500', text: 'ยกเลิกแล้ว' },
   };
-  const cls = map[status] || 'bg-surface-100 text-surface-500';
-  return `<span class="status-badge ${cls}">${_esc(status)}</span>`;
+  const conf = badgeConfig[status] || { cls: 'bg-surface-100 text-surface-500', text: status || '—' };
+  return `<span class="status-badge ${conf.cls}">${_esc(conf.text)}</span>`;
 }
 
 /** Simple debounce */
